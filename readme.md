@@ -17,4 +17,5 @@ Feel free to write me for any questions or comments through the contact form on 
 If you use this app or the procedure described make sure to cite the following papers:
 
 Aldaqre, I. (in prep) First Aid Gaze: An open-source application for cleaning eye tracking data.
+
 Frank, M.C., Vul, E. & Saxe, R. (2012 )Measuring the Development of Social Attention Using Free-Viewing. Infancy, 17(4), 355–375.
