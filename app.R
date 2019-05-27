@@ -56,6 +56,8 @@ ui <- fluidPage(
                  "#image img {max-width: 100%}"
                )),
                br(),
+               textOutput("clickinst"),
+               br(),
                imageOutput("image", width = "auto", height = "auto",
                            click = "image_click"
                ),
@@ -226,6 +228,11 @@ server <- function(input, output) {
     # Return a list
     list(src = input$stimFile$datapath)
   }, deleteFile = F)
+  
+  output$clickinst <- renderText({
+    req(input$stimFile)
+    "Click on target positions in order of appearance:"
+  })
   
   observeEvent(input$image_click, {
     newclicks <- rbind(allclicks(), cbind(input$image_click$x, input$image_click$y))
