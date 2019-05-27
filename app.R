@@ -18,6 +18,8 @@
 # download data
 
 library(shiny)
+library(shinycssloaders)
+library(MASS)
 
 eu.dist <- function(x1, y1, x2, y2){
   return(sqrt(((x2-x1)^2)+((y2-y1)^2)))
@@ -316,6 +318,16 @@ server <- function(input, output) {
       gazedata(cbind(gazedata(), newx, newy))
     }
   })
+  
+  # Downloadable csv of selected dataset ----
+  output$newGazeFile <- downloadHandler(
+    filename = function() {
+      paste("calibrated_",input$gazeFile$name, sep = "")
+    },
+    content = function(file) {
+      write.table(gazedata(), file, sep = getSep(), dec = getDec(), row.names = FALSE)
+    }
+  )
   
 }
 # TODO: download data, dynamic sep
