@@ -50,24 +50,6 @@ ui <- fluidPage(
     # Show a plot of the generated distribution
     mainPanel(tabsetPanel(
       id = "tabs",
-      tabPanel(title = "Start",
-               tags$head(tags$style(
-                 type="text/css",
-                 "#image img {max-width: 100%}"
-               )),
-               br(),
-               textOutput("clickinst"),
-               br(),
-               imageOutput("image", width = "auto", height = "auto",
-                           click = "image_click"
-               ),
-               verbatimTextOutput("clicktext"),
-               verbatimTextOutput("timetext")
-               ),
-      tabPanel(title = "Verify",
-               withSpinner(tableOutput("gazeDataOut")),
-               withSpinner(plotOutput("gazePlotOut"))
-               ),
       tabPanel(title = "Settings",
                br(),
                fluidRow(
@@ -119,6 +101,24 @@ ui <- fluidPage(
                    uiOutput('nastring') # textInput('nastring', 'NA String', "NA")
                  )
                )
+      ),
+      tabPanel(title = "Targets",
+               tags$head(tags$style(
+                 type="text/css",
+                 "#image img {max-width: 100%}"
+               )),
+               br(),
+               textOutput("clickinst"),
+               br(),
+               imageOutput("image", width = "auto", height = "auto",
+                           click = "image_click"
+               ),
+               verbatimTextOutput("clicktext"),
+               verbatimTextOutput("timetext")
+               ),
+      tabPanel(title = "Verify",
+               withSpinner(tableOutput("gazeDataOut")),
+               withSpinner(plotOutput("gazePlotOut"))
                ),
       tabPanel(title = "Help",
                br(),
@@ -130,7 +130,6 @@ ui <- fluidPage(
 # Define server logic required to draw a histogram
 server <- function(input, output) {
   options(shiny.maxRequestSize=30*1024^2)
-  
   output$gazeCoordinatesVariableX <- renderUI({
     if(input$eyetracker == "Tobii"){
       gazexVarName <- 'GazePointX (ADCSpx)'
@@ -139,7 +138,6 @@ server <- function(input, output) {
       gazexVarName <- 'RIGHT_GAZE_X'
     }
     else if(input$eyetracker == "SMI"){
-      # TODO: CHANGE
       gazexVarName <- 'Point of Regard Left X [px]'
     }
     textInput('gazeCoordinatesVariableX', label = 'X Gaze Coordinate Variable', value = gazexVarName)
@@ -153,7 +151,6 @@ server <- function(input, output) {
       gazeyVarName <- 'RIGHT_GAZE_Y'
     }
     else if(input$eyetracker == "SMI"){
-      # TODO: CHANGE
       gazeyVarName <- 'Point of Regard Left Y [px]'
     }
     textInput('gazeCoordinatesVariableY', label = 'X Gaze Coordinate Variable', value = gazeyVarName)
@@ -167,7 +164,6 @@ server <- function(input, output) {
       tsVarName <- 'TIMESTAMP'
     }
     else if(input$eyetracker == "SMI"){
-      # TODO: CHANGE
       tsVarName <- 'RecordingTime [ms]'
     }
     textInput('timestampVariable', label = 'X Gaze Coordinate Variable', value = tsVarName)
@@ -181,7 +177,6 @@ server <- function(input, output) {
       mediaVarName <- 'VIDEO_NAME'
     }
     else if(input$eyetracker == "SMI"){
-      # TODO: CHANGE
       mediaVarName <- 'Stimulus'
     }
     textInput('mediaVariable', label = 'X Gaze Coordinate Variable', value = mediaVarName)
@@ -240,7 +235,6 @@ server <- function(input, output) {
   })
   
   observeEvent(input$gazeFile, {
-    # TODO> add try, catch with NULL
     gazedata(read.table(input$gazeFile$datapath, sep = getSep(), header = T, dec = getDec(), as.is = T, stringsAsFactors = F, na.strings = input$nastring))
   })
   
@@ -337,6 +331,5 @@ server <- function(input, output) {
   )
   
 }
-# TODO: download data, dynamic sep
 # Run the application
 shinyApp(ui = ui, server = server)
