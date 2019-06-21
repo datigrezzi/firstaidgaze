@@ -20,14 +20,30 @@
 library(shiny)
 library(shinycssloaders)
 library(MASS)
+library(htmlwidgets)
 
 eu.dist <- function(x1, y1, x2, y2){
   return(sqrt(((x2-x1)^2)+((y2-y1)^2)))
 }
 
 getevents <- function(gazedata, timestamp_variable, media_variable){
-  stimChange <- c(0, diff(as.factor(gazedata[,media_variable])))
-  return(gazedata[stimChange != 0, c(timestamp_variable, media_variable)])
+  allmedia <- unique(gazedata[,media_variable])
+  if(length(allmedia) == 1){
+    mediatime <- min(gazedata[gazedata[,media_variable] == allmedia[1], timestamp_variable])
+    return(gazedata[gazedata[, timestamp_variable] == mediatime, c(timestamp_variable, media_variable)])
+  }
+  else if(length(allmedia) > 1){
+    stimChange <- c(0, diff(as.factor(gazedata[,media_variable])))
+    return(gazedata[stimChange != 0, c(timestamp_variable, media_variable)])
+  }
+  else{
+    return(NULL)
+  }
+}
+
+getclicks <- function(input, click_object){
+  # x <- input$click_object$x
+  print(input$click_object)
 }
 
 # Define UI for application that draws a histogram
@@ -100,6 +116,12 @@ ui <- fluidPage(
                    2,
                    uiOutput('nastring') # textInput('nastring', 'NA String', "NA")
                  )
+               ),
+               fluidRow(
+                 column(
+                   2,
+                   textInput('imageWidth', 'Image Width', "1280")
+                 )
                )
       ),
       tabPanel(title = "Targets",
@@ -128,7 +150,7 @@ ui <- fluidPage(
 )
 
 # Define server logic required to draw a histogram
-server <- function(input, output) {
+server <- function(input, output, session) {
   options(shiny.maxRequestSize=30*1024^2)
   output$gazeCoordinatesVariableX <- renderUI({
     if(input$eyetracker == "Tobii"){
@@ -153,7 +175,7 @@ server <- function(input, output) {
     else if(input$eyetracker == "SMI"){
       gazeyVarName <- 'Point of Regard Left Y [px]'
     }
-    textInput('gazeCoordinatesVariableY', label = 'X Gaze Coordinate Variable', value = gazeyVarName)
+    textInput('gazeCoordinatesVariableY', label = 'Y Gaze Coordinate Variable', value = gazeyVarName)
   })
   
   output$timestampVariable <- renderUI({
@@ -166,7 +188,7 @@ server <- function(input, output) {
     else if(input$eyetracker == "SMI"){
       tsVarName <- 'RecordingTime [ms]'
     }
-    textInput('timestampVariable', label = 'X Gaze Coordinate Variable', value = tsVarName)
+    textInput('timestampVariable', label = 'Timestamp Variable', value = tsVarName)
   })
   
   output$mediaVariable <- renderUI({
@@ -179,7 +201,7 @@ server <- function(input, output) {
     else if(input$eyetracker == "SMI"){
       mediaVarName <- 'Stimulus'
     }
-    textInput('mediaVariable', label = 'X Gaze Coordinate Variable', value = mediaVarName)
+    textInput('mediaVariable', label = 'Media Name Variable', value = mediaVarName)
   })
   output$nastring <- renderUI({
     if(input$eyetracker == "Tobii"){
@@ -220,9 +242,8 @@ server <- function(input, output) {
   
   output$image <- renderImage({
     req(input$stimFile)
-    # Return a list
     list(src = input$stimFile$datapath)
-  }, deleteFile = F)
+  }, deleteFile = T)
   
   output$clickinst <- renderText({
     req(input$stimFile)
@@ -230,7 +251,9 @@ server <- function(input, output) {
   })
   
   observeEvent(input$image_click, {
-    newclicks <- rbind(allclicks(), cbind(input$image_click$x, input$image_click$y))
+    # allclicks(input$image_click)
+    imageScaleRatio <- session$clientData$output_image_width / as.numeric(input$imageWidth)
+    newclicks <- rbind(allclicks(), cbind(input$image_click$x / imageScaleRatio, input$image_click$y / imageScaleRatio))
     allclicks(newclicks)
   })
   
@@ -258,7 +281,8 @@ server <- function(input, output) {
   
   output$clicktext <- renderPrint({
     req(input$stimFile)
-    cat("Clicks:\n")
+    imageScaleRatio <- session$clientData$output_image_width / as.numeric(input$imageWidth)
+    cat(paste(imageScaleRatio,"& Clicks:\n"))
     allclicks()
   })
   
@@ -296,6 +320,8 @@ server <- function(input, output) {
     if(!is.null(input$mediaVariable)){
       tempdata <- gazedata()[grepl(substr(input$stimFile$name, 1,nchar(input$stimFile$name) - 4), gazedata()[,make.names(input$mediaVariable)]), ]
       
+      # this works for movie. should work for repeated images that have the same target location
+      # TODO: to support separate images with different target position, add single time (e.g. 200 for relocation) and click in the same order of the images in the script (even if same position is repeated). Should add a drop down for calibstim type
       for(thisstart in calibstimstart()){
         # prep data for regression
         for(ii in 1:length(targetsX)){
