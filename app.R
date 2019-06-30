@@ -115,12 +115,18 @@ ui <- fluidPage(
                  column(
                    2,
                    uiOutput('nastring') # textInput('nastring', 'NA String', "NA")
-                 )
-               ),
-               fluidRow(
+                 ),
                  column(
-                   2,
+                   3,
                    textInput('imageWidth', 'Image Width', "1280")
+                 ),
+                 column(
+                   3,
+                   selectInput('calibStimType', 'Stimulus Type', c("Single", "Multiple"))
+                 ),
+                 column(
+                   3,
+                   textInput('calibStimExclude', 'Exclude Stimulus', "instruction")
                  )
                )
       ),
@@ -151,7 +157,7 @@ ui <- fluidPage(
 
 # Define server logic required to draw a histogram
 server <- function(input, output, session) {
-  options(shiny.maxRequestSize=30*1024^2)
+  options(shiny.maxRequestSize=80*1024^2)
   output$gazeCoordinatesVariableX <- renderUI({
     if(input$eyetracker == "Tobii"){
       gazexVarName <- 'GazePointX (ADCSpx)'
@@ -266,7 +272,7 @@ server <- function(input, output, session) {
     req(input$gazeFile)
     req(input$stimFile)
     allEvents <- getevents(gazedata(), make.names(input$timestampVariable), make.names(input$mediaVariable))
-    stimstart <- as.numeric(allEvents[grepl(substr(input$stimFile$name, 1,nchar(input$stimFile$name) - 4), allEvents[,make.names(input$mediaVariable)]),make.names(input$timestampVariable)])
+    stimstart <- as.numeric(allEvents[grepl(substr(input$stimFile$name, 1,nchar(input$stimFile$name) - 4), allEvents[,make.names(input$mediaVariable)]) & !grepl(input$calibStimExclude, allEvents[,make.names(input$mediaVariable)], ignore.case = T),make.names(input$timestampVariable)])
     return(stimstart)
   })
   
@@ -279,17 +285,20 @@ server <- function(input, output, session) {
     }
   })
   
+  # TODO: cbind start times to xy clicked target coordinates
   output$clicktext <- renderPrint({
     req(input$stimFile)
     imageScaleRatio <- session$clientData$output_image_width / as.numeric(input$imageWidth)
-    cat(paste(imageScaleRatio,"& Clicks:\n"))
+    cat("Clicks:\n")
     allclicks()
   })
   
+  # TODO: cbind start times with stimulus names to help getting correct click order
   output$timetext <- renderPrint({
     req(input$stimFile)
-    cat("Times:\n")
-    getTimes()
+    cat("Stimuli:\n")
+    # getTimes()
+    calibstimstart()
   })
   
   output$gazeDataOut <- renderTable({
@@ -301,7 +310,7 @@ server <- function(input, output, session) {
     req(input$gazeFile)
     req(input$stimFile)
     req(input$mediaVariable)
-    plot(as.numeric(gazedata()[grepl(substr(input$stimFile$name, 1,nchar(input$stimFile$name) - 4), gazedata()[,make.names(input$mediaVariable)]),make.names(input$gazeCoordinatesVariableX)]), as.numeric(gazedata()[grepl(substr(input$stimFile$name, 1,nchar(input$stimFile$name) - 4), gazedata()[,make.names(input$mediaVariable)]),make.names(input$gazeCoordinatesVariableY)]), xlim = c(0, as.numeric(input$screenResolutionW)), ylim = c(as.numeric(input$screenResolutionH), 0), xlab = "X Gaze Coordinates", ylab = "Y Gaze Coordinates")
+    plot(as.numeric(gazedata()[grepl(substr(input$stimFile$name, 1,nchar(input$stimFile$name) - 4), gazedata()[,make.names(input$mediaVariable)]) & !grepl(input$calibStimExclude, gazedata()[,make.names(input$mediaVariable)], ignore.case = T),make.names(input$gazeCoordinatesVariableX)]), as.numeric(gazedata()[grepl(substr(input$stimFile$name, 1,nchar(input$stimFile$name) - 4), gazedata()[,make.names(input$mediaVariable)])  & !grepl(input$calibStimExclude, gazedata()[,make.names(input$mediaVariable)], ignore.case = T),make.names(input$gazeCoordinatesVariableY)]), xlim = c(0, as.numeric(input$screenResolutionW)), ylim = c(as.numeric(input$screenResolutionH), 0), xlab = "X Gaze Coordinates", ylab = "Y Gaze Coordinates")
     if(is.element("newx", names(gazedata()))){
       points(gazedata()$newx[grepl(substr(input$stimFile$name, 1,nchar(input$stimFile$name) - 4), gazedata()[,make.names(input$mediaVariable)])], gazedata()$newy[grepl(substr(input$stimFile$name, 1,nchar(input$stimFile$name) - 4), gazedata()[,make.names(input$mediaVariable)])], col = "red")
     }
@@ -320,18 +329,30 @@ server <- function(input, output, session) {
     if(!is.null(input$mediaVariable)){
       tempdata <- gazedata()[grepl(substr(input$stimFile$name, 1,nchar(input$stimFile$name) - 4), gazedata()[,make.names(input$mediaVariable)]), ]
       
-      # this works for movie. should work for repeated images that have the same target location
-      # TODO: to support separate images with different target position, add single time (e.g. 200 for relocation) and click in the same order of the images in the script (even if same position is repeated). Should add a drop down for calibstim type
-      for(thisstart in calibstimstart()){
-        # prep data for regression
-        for(ii in 1:length(targetsX)){
-          tempdata$target_x[as.numeric(tempdata[, make.names(input$timestampVariable)]) >= times[ii] + thisstart & as.numeric(tempdata[, make.names(input$timestampVariable)]) <= times[ii] + thisstart + as.numeric(input$targetDuration)] <- targetsX[ii]
-          tempdata$target_y[as.numeric(tempdata[, make.names(input$timestampVariable)]) >= times[ii] + thisstart & as.numeric(tempdata[, make.names(input$timestampVariable)]) <= times[ii] + thisstart + as.numeric(input$targetDuration)] <- targetsY[ii]
+      # single works for movie. should work for repeated images that have the same target location
+      # TODO: add documentation in help for support separate images with different target position, add single time (e.g. 200 for relocation) and click in the same order of the images in the script (even if same position is repeated).
+      # check which type of verifiation stimulus is used
+      if(input$calibStimType == "Single"){
+        for(thisstart in calibstimstart()){
+          # prep data for regression
+          for(ii in 1:length(targetsX)){
+            tempdata$target_x[as.numeric(tempdata[, make.names(input$timestampVariable)]) >= times[ii] + thisstart & as.numeric(tempdata[, make.names(input$timestampVariable)]) <= times[ii] + thisstart + as.numeric(input$targetDuration)] <- targetsX[ii]
+            tempdata$target_y[as.numeric(tempdata[, make.names(input$timestampVariable)]) >= times[ii] + thisstart & as.numeric(tempdata[, make.names(input$timestampVariable)]) <= times[ii] + thisstart + as.numeric(input$targetDuration)] <- targetsY[ii]
+          }
         }
       }
-      tempdata <- tempdata[!is.na(tempdata$target_x) & eu.dist(as.numeric(tempdata[,make.names(input$gazeCoordinatesVariableX)]), as.numeric(tempdata[,make.names(input$gazeCoordinatesVariableY)]), tempdata$target_x, tempdata$target_y) <= as.numeric(input$distanceThreshold),]
+      else if(input$calibStimType == "Multiple"){
+        for(ii in 1:length(calibstimstart())){
+          tempdata$target_x[as.numeric(tempdata[, make.names(input$timestampVariable)]) >= times[1] + calibstimstart()[ii] & as.numeric(tempdata[, make.names(input$timestampVariable)]) <= times[1] + calibstimstart()[ii] + as.numeric(input$targetDuration)] <- targetsX[ii]
+          tempdata$target_y[as.numeric(tempdata[, make.names(input$timestampVariable)]) >= times[1] + calibstimstart()[ii] & as.numeric(tempdata[, make.names(input$timestampVariable)]) <= times[1] + calibstimstart()[ii] + as.numeric(input$targetDuration)] <- targetsY[ii]
+        }
+      }
+      
+      # prepare data to train regression
+      tempdata2 <- tempdata[!is.na(tempdata$target_x) & eu.dist(as.numeric(tempdata[,make.names(input$gazeCoordinatesVariableX)]), as.numeric(tempdata[,make.names(input$gazeCoordinatesVariableY)]), tempdata$target_x, tempdata$target_y) <= as.numeric(input$distanceThreshold),]
       true_x <- tempdata$target_x
       test_x <- as.numeric(tempdata[,make.names(input$gazeCoordinatesVariableX)])
+      # TODO: add trycatch
       x_model <- rlm(true_x ~ test_x, psi = psi.bisquare)
       true_y <- tempdata$target_y
       test_y <- as.numeric(tempdata[,make.names(input$gazeCoordinatesVariableY)])
