@@ -1,26 +1,20 @@
-# a modular Shiny app to do a post-hoc calibration on gaze data
+# a Shiny app to do a post-hoc calibration on gaze data
 # Iyad Aldaqre
 # 13.05.2019
 
-# Tab 1: Load, Calibrate, Download
-# load gaze data and stimulus image
-# choose calibration stimulus (automatically from image name)
-# train regression and apply to data
-# download data (temporary here)
-
-# sidebar: upload data, image, settings button, submit and download
-# main: data header (rows in settings), stimz
-
-# Tab 2: Settings
-# Choose what to do with NAs
-# Apply running median filter for noise cancellation
-# Choose which eye to use (create new variables for either left, right, average or strict average)
-# download data
+# Tab 1: Settings
+# Tab 2: Target selection
+# Tab 3: Validate data has been loaded correctly
+# and check calibration
+# Tab 4: Help: to come...
+# sidebar: upload data, image, submit and download
 
 library(shiny)
 library(shinycssloaders)
-library(MASS)
 library(htmlwidgets)
+library(MASS)
+library(png)
+library(jpeg)
 
 eu.dist <- function(x1, y1, x2, y2){
   return(sqrt(((x2-x1)^2)+((y2-y1)^2)))
@@ -118,10 +112,6 @@ ui <- fluidPage(
                  ),
                  column(
                    3,
-                   textInput('imageWidth', 'Image Width', "1280")
-                 ),
-                 column(
-                   3,
                    selectInput('calibStimType', 'Stimulus Type', c("Single", "Multiple"))
                  ),
                  column(
@@ -131,18 +121,13 @@ ui <- fluidPage(
                )
       ),
       tabPanel(title = "Targets",
-               tags$head(tags$style(
-                 type="text/css",
-                 "#image img {max-width: 100%}"
-               )),
+               tags$head(tags$style(type="text/css","#image img {max-width: 100%}")),
                br(),
                textOutput("clickinst"),
                br(),
-               imageOutput("image", width = "auto", height = "auto",
-                           click = "image_click"
-               ),
-               verbatimTextOutput("clicktext"),
-               verbatimTextOutput("timetext")
+               imageOutput("image", width = "auto", height = "auto", click = "image_click"),
+               br(),
+               verbatimTextOutput("clicktext")
                ),
       tabPanel(title = "Verify",
                withSpinner(tableOutput("gazeDataOut")),
@@ -157,7 +142,9 @@ ui <- fluidPage(
 
 # Define server logic required to draw a histogram
 server <- function(input, output, session) {
+  # increase maximum file size
   options(shiny.maxRequestSize=80*1024^2)
+  # set tracker-specific variable names
   output$gazeCoordinatesVariableX <- renderUI({
     if(input$eyetracker == "Tobii"){
       gazexVarName <- 'GazePointX (ADCSpx)'
@@ -170,7 +157,6 @@ server <- function(input, output, session) {
     }
     textInput('gazeCoordinatesVariableX', label = 'X Gaze Coordinate Variable', value = gazexVarName)
   })
-  
   output$gazeCoordinatesVariableY <- renderUI({
     if(input$eyetracker == "Tobii"){
       gazeyVarName <- 'GazePointY (ADCSpx)'
@@ -183,7 +169,6 @@ server <- function(input, output, session) {
     }
     textInput('gazeCoordinatesVariableY', label = 'Y Gaze Coordinate Variable', value = gazeyVarName)
   })
-  
   output$timestampVariable <- renderUI({
     if(input$eyetracker == "Tobii"){
       tsVarName <- 'RecordingTimestamp'
@@ -196,7 +181,6 @@ server <- function(input, output, session) {
     }
     textInput('timestampVariable', label = 'Timestamp Variable', value = tsVarName)
   })
-  
   output$mediaVariable <- renderUI({
     if(input$eyetracker == "Tobii"){
       mediaVarName <- 'MediaName'
@@ -221,7 +205,7 @@ server <- function(input, output, session) {
     }
     textInput('nastring', 'NA String', nastr)
   })
-  
+  # get other settings
   getSep <- reactive({
     if(input$separator == 'TAB'){
       return("\t")
@@ -233,7 +217,6 @@ server <- function(input, output, session) {
       return(';')
     }
   })
-  
   getDec <- reactive({
     if(input$decimal == 'Comma'){
       return(',')
@@ -242,14 +225,44 @@ server <- function(input, output, session) {
       return('.')
     }
   })
-  
+  # prepare "global" variables for clicks and gaze data
   allclicks <- reactiveVal()
   gazedata <- reactiveVal()
-  
+  imageScaleRatio <- reactiveVal(value = 1)
+
   output$image <- renderImage({
     req(input$stimFile)
-    list(src = input$stimFile$datapath)
-  }, deleteFile = T)
+    # get original image for size and resize
+    # TODO: get original dimansions once in a reactive function and return size
+    extension <- tolower(substr(input$stimFile$datapath, nchar(input$stimFile$datapath)-3, nchar(input$stimFile$datapath)))
+    print(extension)
+    if(extension == ".jpg" || extension == "jpeg"){
+      originalImage <- readJPEG(input$stimFile$datapath)
+    }
+    else if(extension == ".png"){
+      originalImage <- readPNG(input$stimFile$datapath)
+    }
+    originalDimensions <- dim(originalImage)[c(2,1)] # width [2], height [1]
+    # client size
+    viewDimensions = c(session$clientData$output_image_width, session$clientData$output_image_height)
+    # calculate original and view ratio
+    origRatio <- originalDimensions[1] / originalDimensions[2]
+    viewRatio <- viewDimensions[1] / viewDimensions[2]
+    print(paste("Original:", origRatio, "View:", viewRatio))
+    # which side was used to fill canvas (if client is wider, height was used, else width was)
+    if(round(viewRatio, 2) == round(origRatio, 2) | viewRatio <= 1 | viewRatio == Inf){
+      print("width used")
+      conversionRatio <- viewDimensions[1] / originalDimensions[1]
+    }
+    else {
+      print("height used")
+      conversionRatio <- viewDimensions[2] / originalDimensions[2]
+    }
+    imageScaleRatio(conversionRatio)
+    list(
+      src = input$stimFile$datapath
+    )
+  }, deleteFile = F)
   
   output$clickinst <- renderText({
     req(input$stimFile)
@@ -257,9 +270,7 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$image_click, {
-    # allclicks(input$image_click)
-    imageScaleRatio <- session$clientData$output_image_width / as.numeric(input$imageWidth)
-    newclicks <- rbind(allclicks(), cbind(input$image_click$x / imageScaleRatio, input$image_click$y / imageScaleRatio))
+    newclicks <- rbind(allclicks(), cbind(input$image_click$x / imageScaleRatio(), input$image_click$y / imageScaleRatio()))
     allclicks(newclicks)
   })
   
@@ -285,20 +296,11 @@ server <- function(input, output, session) {
     }
   })
   
-  # TODO: cbind start times to xy clicked target coordinates
+  # TODO: cbind xy clicked target coordinates with start times and stimulus names to help getting correct click order
   output$clicktext <- renderPrint({
     req(input$stimFile)
-    imageScaleRatio <- session$clientData$output_image_width / as.numeric(input$imageWidth)
     cat("Clicks:\n")
     allclicks()
-  })
-  
-  # TODO: cbind start times with stimulus names to help getting correct click order
-  output$timetext <- renderPrint({
-    req(input$stimFile)
-    cat("Stimuli:\n")
-    # getTimes()
-    calibstimstart()
   })
   
   output$gazeDataOut <- renderTable({
@@ -329,8 +331,6 @@ server <- function(input, output, session) {
     if(!is.null(input$mediaVariable)){
       tempdata <- gazedata()[grepl(substr(input$stimFile$name, 1,nchar(input$stimFile$name) - 4), gazedata()[,make.names(input$mediaVariable)]), ]
       
-      # single works for movie. should work for repeated images that have the same target location
-      # TODO: add documentation in help for support separate images with different target position, add single time (e.g. 200 for relocation) and click in the same order of the images in the script (even if same position is repeated).
       # check which type of verifiation stimulus is used
       if(input$calibStimType == "Single"){
         for(thisstart in calibstimstart()){
