@@ -48,7 +48,7 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       selectInput('eyetracker', 'Eye Tracker', c("Tobii", "SMI", "EyeLink")),
-      fileInput("gazeFile", "Upload Gaze File",  accept = c("text/csv", "text/tsv", "text/txt")),
+      fileInput("gazeFile", "Upload Gaze File",  accept = "text"),
       fileInput("stimFile", "Upload Stimulus Image",  accept = c('image/png', 'image/jpeg','image/jpg')),
       textInput("targetTimes", "Targets Onset:", value = "1200; 4200; 7200; 10200"),
       actionButton("calibrate", "Start Calibration"),
@@ -234,8 +234,9 @@ server <- function(input, output, session) {
     req(input$stimFile)
     # get original image for size and resize
     # TODO: get original dimansions once in a reactive function and return size
+    ### from here
     extension <- tolower(substr(input$stimFile$datapath, nchar(input$stimFile$datapath)-3, nchar(input$stimFile$datapath)))
-    print(extension)
+    # print(extension)
     if(extension == ".jpg" || extension == "jpeg"){
       originalImage <- readJPEG(input$stimFile$datapath)
     }
@@ -245,19 +246,22 @@ server <- function(input, output, session) {
     originalDimensions <- dim(originalImage)[c(2,1)] # width [2], height [1]
     # client size
     viewDimensions = c(session$clientData$output_image_width, session$clientData$output_image_height)
+    ### till here
+    
     # calculate original and view ratio
     origRatio <- originalDimensions[1] / originalDimensions[2]
     viewRatio <- viewDimensions[1] / viewDimensions[2]
-    print(paste("Original:", origRatio, "View:", viewRatio))
+    # print(paste("Original:", origRatio, "View:", viewRatio))
     # which side was used to fill canvas (if client is wider, height was used, else width was)
     if(round(viewRatio, 2) == round(origRatio, 2) | viewRatio <= 1 | viewRatio == Inf){
-      print("width used")
+      # print("width used")
       conversionRatio <- viewDimensions[1] / originalDimensions[1]
     }
     else {
-      print("height used")
+      # print("height used")
       conversionRatio <- viewDimensions[2] / originalDimensions[2]
     }
+    print(conversionRatio)
     imageScaleRatio(conversionRatio)
     list(
       src = input$stimFile$datapath
