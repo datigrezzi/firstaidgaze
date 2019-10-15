@@ -4,91 +4,60 @@ library(htmlwidgets)
 
 ui <- navbarPage("First Aid Gaze",
     tabPanel("Data",
-        selectInput('eyetracker', 'Eye Tracker', c("Tobii", "SMI", "EyeLink")), #data
         fluidRow(
-            column(
-                2,
+            sidebarPanel(
+                selectInput('eyetracker', 'Eye Tracker', c("Tobii", "SMI", "EyeLink")), #data,
+                selectInput('separator', 'Separator', c('TAB', 'Comma', 'Semicolon')), #data
+                selectInput('decimal', 'Decimal', c('Point', 'Comma'), selected = 'Comma'), #data
                 uiOutput('nastring') #data textInput('nastring', 'NA String', "NA")
             ),
-            column(
-                2,
-                selectInput('separator', 'Sep', c('TAB', 'Comma', 'Semicolon'))#data
-            ),
-            column(
-                2,
-                selectInput('decimal', 'Dec', c('Point', 'Comma'))#data
+            sidebarPanel(
+                uiOutput('gazeCoordinatesVariableX'), #var
+                uiOutput('gazeCoordinatesVariableY'), #var, 'X Gaze Coordinate Variable', 'GazePointX (ADCSpx)')
+                uiOutput('timestampVariable'), #var, 'Timestamp variable', 'RecordingTimestamp')
+                uiOutput('mediaVariable') #var, 'Stimulus Name Variable', 'MediaName')
             )
         ),
-        fluidRow(
-            column(
-             4,
-             uiOutput('gazeCoordinatesVariableX'), #var
-             uiOutput('gazeCoordinatesVariableY')#var, 'X Gaze Coordinate Variable', 'GazePointX (ADCSpx)')
-            ),
-            column(
-             4,
-             uiOutput('timestampVariable'), #var, 'Timestamp variable', 'RecordingTimestamp'),
-             uiOutput('mediaVariable') #var, 'Stimulus Name Variable', 'MediaName')
-            )
-        ),
-        fileInput("gazeFile", "Upload Gaze File",  accept = "text"), #data
         br(),
-        withSpinner(tableOutput("gazeDataOut")) #data
+        fileInput("gazeFile", "Upload Gaze File", accept = c("text/tsv", ".tsv", "text/csv","text/comma-separated-values,text/plain",".csv")), #data
+        br(),
+        withSpinner(dataTableOutput("gazeDataOut")) #data ,style = "height:500px; overflow-y: scroll;overflow-x: scroll;"
+        
     ),
     tabPanel(title = "Stimulus",
-        fileInput("stimFile", "Upload Stimulus Image",  accept = c('image/png', 'image/jpeg','image/jpg')), #stim
-        textInput("targetTimes", "Targets Onset:", value = "1200; 4200; 7200; 10200"), #stim
         fluidRow(
-            column(
-                2,
-                textInput('screenResolutionW', 'Screen Width', '1280')#stim
+            sidebarPanel(
+                selectInput('calibStimType', 'Stimulus Type', c("Single", "Multiple")), #stim
+                textInput("targetTimes", "Targets Onset:", value = "1200; 4200; 7200; 10200"), #stim
+                textInput('targetDuration', 'Target Duration', '1000'), #stim
+                textInput('calibStimExclude', 'Exclude Stimulus', "instruction") #stim
             ),
-            column(
-                2,
-                textInput('screenResolutionH', 'Height', '1024')#stim
+            sidebarPanel(
+                textInput('screenResolutionW', 'Screen Width', '1280'), #stim
+                textInput('screenResolutionH', 'Screen Height', '1024'), #stim
+                textInput('calibStimTop', 'Stimulus Top', '224'), #stim
+                textInput('calibStimLeft', 'Stimulus Left', '280') #stim
             ),
-            column(
-                2,
-                textInput('calibStimTop', 'Top', '224')#stim
-            ),
-            column(
-                2,
-                textInput('calibStimLeft', 'Left', '280')#stim
+            sidebarPanel(
+                fileInput("stimFile", "Upload Stimulus Image",  accept = c('image/png', 'image/jpeg','image/jpg')), #stim
+                textInput('distanceThreshold', 'Max Point Distance', '400'), #calib
+                actionButton("calibrate", "Start Calibration"), #calib
+                br(),
+                br(),
+                downloadButton("newGazeFile", label = "Data"), # data
+                downloadButton("downloadMetrics", label = "Metrics") # metrics
             )
         ),
-        fluidRow(
-            column(
-                3,
-                selectInput('calibStimType', 'Stimulus Type', c("Single", "Multiple"))#stim
-            ),
-            column(
-                3,
-                textInput('calibStimExclude', 'Exclude Stimulus', "instruction")#stim
-            ),
-            column(
-                4,
-                textInput('distanceThreshold', 'Max Point Distance', '400'),#calib
-                textInput('targetDuration', 'Target Duration (ms)', '1000')#stim
-            )
-        ),
-        
-        actionButton("calibrate", "Start Calibration"),#calib
-        downloadButton("newGazeFile", label = "Download"), #calib
-
-        tags$head(tags$style(type="text/css","#image img {max-width: 100%}")), #stim
         br(),
+        # tags$head(tags$style(type="text/css","#image img {max-width: 100%}")), #stim
         textOutput("clickinst"), #stim
         br(),
-        withSpinner(plotOutput("gazePlotOut", click = "image_click"))#, #stim
-        # imageOutput("image", width = "auto", height = "auto"), #stim
-        # br(),
-        # verbatimTextOutput("clicktext") #replace by points on image
+        withSpinner(plotOutput("gazePlotOut", click = "image_click")),# #stim
+        br(),
+        withSpinner(dataTableOutput("calibmetrics")) #data ,style = "height:500px; overflow-y: scroll;overflow-x: scroll;"
     ),
-    # tabPanel(title = "Verify",
-    #     withSpinner(plotOutput("gazePlotOut"), click = "image_click") #stim
-    # ),
     tabPanel(title = "Help",
         br(),
-        h4("Coming soon...")
+        includeMarkdown("readme.md")
     )
 )
