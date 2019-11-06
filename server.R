@@ -36,7 +36,6 @@ metrics <- function(gazedata, targets, xcoordsvar, ycoordsvar){
         }
     }
     metricsout <- data.frame(accuracies_original, accuracies_corrected, precisions_original, precisions_corrected)
-    print(metricsout)
     return(metricsout)
 }
 
@@ -53,11 +52,6 @@ getevents <- function(gazedata, timestamp_variable, media_variable){
     else{
         return(NULL)
     }
-}
-
-getclicks <- function(input, click_object){
-    # x <- input$click_object$x
-    print(input$click_object)
 }
 
 addTargets <- function(gazedata = gazedata(), stimstart = calibstimstart(), stimtype = input$calibStimType, targets = targets, tsvariable = input$timestampVariable, stimvariable, stimtimes = times, targetduration = input$targetDuration){
@@ -179,7 +173,6 @@ server <- function(input, output, session) {
     loadImage <- reactive({
         req(input$stimFile)
         extension <- tolower(substr(input$stimFile$datapath, nchar(input$stimFile$datapath)-3, nchar(input$stimFile$datapath)))
-        # print(extension)
         if(extension == ".jpg" || extension == "jpeg"){
             originalImage <- readJPEG(input$stimFile$datapath)
         }
@@ -195,7 +188,6 @@ server <- function(input, output, session) {
     })
     
     observeEvent(input$image_click, {
-        # newclicks <- rbind(allclicks(), cbind(input$image_click$x / imageScaleRatio(), input$image_click$y / imageScaleRatio()))
         newclicks <- rbind(allclicks(), cbind(input$image_click$x, input$image_click$y))
         allclicks(newclicks)
     })
@@ -256,23 +248,6 @@ server <- function(input, output, session) {
         targetsX <- targets[,1]
         targetsY <- targets[,2]
         if(!is.null(input$mediaVariable)){
-            # tempdata <- gazedata()[grepl(substr(input$stimFile$name, 1,nchar(input$stimFile$name) - 4), gazedata()[,make.names(input$mediaVariable)]), ]
-            # check which type of verifiation stimulus is used
-            # if(input$calibStimType == "Single"){
-            #     for(thisstart in calibstimstart()){
-            #         # prep data for regression
-            #         for(ii in 1:length(targetsX)){
-            #             tempdata$target_x[as.numeric(tempdata[, make.names(input$timestampVariable)]) >= times[ii] + thisstart & as.numeric(tempdata[, make.names(input$timestampVariable)]) <= times[ii] + thisstart + as.numeric(input$targetDuration)] <- targetsX[ii]
-            #             tempdata$target_y[as.numeric(tempdata[, make.names(input$timestampVariable)]) >= times[ii] + thisstart & as.numeric(tempdata[, make.names(input$timestampVariable)]) <= times[ii] + thisstart + as.numeric(input$targetDuration)] <- targetsY[ii]
-            #         }
-            #     }
-            # }
-            # else if(input$calibStimType == "Multiple"){
-            #     for(ii in 1:length(calibstimstart())){
-            #         tempdata$target_x[as.numeric(tempdata[, make.names(input$timestampVariable)]) >= times[1] + calibstimstart()[ii] & as.numeric(tempdata[, make.names(input$timestampVariable)]) <= times[1] + calibstimstart()[ii] + as.numeric(input$targetDuration)] <- targetsX[ii]
-            #         tempdata$target_y[as.numeric(tempdata[, make.names(input$timestampVariable)]) >= times[1] + calibstimstart()[ii] & as.numeric(tempdata[, make.names(input$timestampVariable)]) <= times[1] + calibstimstart()[ii] + as.numeric(input$targetDuration)] <- targetsY[ii]
-            #     }
-            # }
             gazedata(addTargets(gazedata = gazedata(), stimstart = calibstimstart(), stimtype = input$calibStimType, targets = targets, tsvariable = input$timestampVariable, stimvariable, stimtimes = times, targetduration = input$targetDuration))
             # select only calibration media data            
             tempdata <- gazedata()[grepl(substr(input$stimFile$name, 1,nchar(input$stimFile$name) - 4), gazedata()[,make.names(input$mediaVariable)]), ]
