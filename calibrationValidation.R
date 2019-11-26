@@ -1,3 +1,4 @@
+require(MASS)
 
 eu.dist <- function(x1, y1, x2, y2){
     return(sqrt(((x2-x1)^2)+((y2-y1)^2)))
@@ -16,6 +17,10 @@ getevents <- function(gazedata, timestamp_variable, media_variable){
     else{
         return(NULL)
     }
+}
+
+getCalibStimStart <- function(events, calib_stim_name = input$stimFile$name, media_variable = input$mediaVariable, tsvariable = input$timestampVariable, excluded_stim = input$calibStimExclude){
+    return(as.numeric(events[grepl(substr(calib_stim_name, 1,nchar(calib_stim_name) - 4), events[,make.names(media_variable)]) & !grepl(excluded_stim, events[,make.names(media_variable)], ignore.case = T),make.names(tsvariable)]))
 }
 
 addTargets <- function(gazedata, stimstart, stimtype, targets, tsvariable, stimvariable, stimtimes, targetduration){
@@ -44,24 +49,25 @@ addTargets <- function(gazedata, stimstart, stimtype, targets, tsvariable, stimv
 }
 
 validateCalibrate <- function(gazedata = gazedata(), calib_media_name = input$stimFile$name, media_variable = input$mediaVariable, gaze_point_x_variable = input$gazeCoordinatesVariableX, gaze_point_y_variable = input$gazeCoordinatesVariableY, max_distance = input$distanceThreshold){
+    # TODO: train data with half target duration, use other half for metrics
+    # After calculating metrics training can then be run with all media
+    
     # TODO: change to warning
     if(!is.element("target_x", names(gazedata))){
         print("Make sure to run addTargets() before validating calibration!")
     }
-    ### start calibration function here
     # select only calibration media data, ignoring extension          
     tempdata <- gazedata[grepl(substr(calib_media_name, 1,nchar(calib_media_name) - 4), gazedata[,make.names(media_variable)]), ]
     # prepare data to train regression
-    tempdata2 <- tempdata[!is.na(tempdata$target_x) & eu.dist(as.numeric(tempdata[,make.names(gaze_point_x_variable)]), as.numeric(tempdata[,make.names(gaze_point_y_variable)]), tempdata$target_x, tempdata$target_y) <= as.numeric(max_distance),]
-    
-    true_x <- tempdata2$target_x
-    test_x <- as.numeric(tempdata2[,make.names(gaze_point_x_variable)])
+    tempdata <- tempdata[!is.na(tempdata$target_x) & eu.dist(as.numeric(tempdata[,make.names(gaze_point_x_variable)]), as.numeric(tempdata[,make.names(gaze_point_y_variable)]), tempdata$target_x, tempdata$target_y) <= as.numeric(max_distance),]
+    true_x <- tempdata$target_x
+    test_x <- as.numeric(tempdata[,make.names(gaze_point_x_variable)])
     # TODO: add trycatch
-    x_model <- rlm(tempdata2$target_x ~ test_x, psi = psi.bisquare)
-    true_y <- tempdata2$target_y
-    test_y <- as.numeric(tempdata2[,make.names(gaze_point_y_variable)])
+    x_model <- rlm(tempdata$target_x ~ test_x, psi = psi.bisquare)
+    true_y <- tempdata$target_y
+    test_y <- as.numeric(tempdata[,make.names(gaze_point_y_variable)])
     y_model <- rlm(true_y ~ test_y, psi = psi.bisquare)
-    
+
     newx <- predict(x_model, newdata = data.frame(test_x = as.numeric(gazedata[,make.names(gaze_point_x_variable)])))
     newy <- predict(y_model, newdata = data.frame(test_y = as.numeric(gazedata[,make.names(gaze_point_y_variable)])))
     # remove newx and newy if available to replace with new ones
@@ -70,14 +76,11 @@ validateCalibrate <- function(gazedata = gazedata(), calib_media_name = input$st
     }
     # add updatednewx and newy
     return(cbind(gazedata, newx, newy))
-    ### finish calibration validation here
-    
-    # TODO: add training media index to keep some media for testing
-    # After calculating metrics training can then be run with all media
 }
 
 ### After running validateCalibrate() we can calculate calibration metrics
-# TODO: add test media index for testing performance
+# TODO: add test media time for testing performance (skipping segment with which regression was trained)
+# TODO: optimize loop
 metrics <- function(gazedata, targets, xcoordsvar, ycoordsvar){
     xcoordsvar <- make.names(xcoordsvar)
     ycoordsvar <- make.names(ycoordsvar)
@@ -107,4 +110,39 @@ metrics <- function(gazedata, targets, xcoordsvar, ycoordsvar){
     }
     metricsout <- data.frame(accuracies_original, accuracies_corrected, precisions_original, precisions_corrected)
     return(metricsout)
+}
+
+if(FALSE){
+    # choose gaze data file
+    thisfile <- file.choose()
+    # these settings are for LMU Babylab data for MB2
+    mygazedata <- read.table(thisfile, header=T, sep='\t', dec=".")
+    # Get participant list
+    participants <- unique(mygazedata$ParticipantName)
+    # prepare empty data frame for metrics
+    allMetrics <- data.frame()
+    for(participant in participants){
+        # select participant data
+        tmp <- mygazedata[mygazedata$ParticipantName == participant,]
+        # get all events for this recording
+        theseEvents <- getevents(tmp, timestamp_variable = "RecordingTimestamp", media_variable = "MediaName")
+        # get calibration stimulus onsets; this stimulus is the one used for MB2 pilot
+        stimstart <- getCalibStimStart(theseEvents, calib_stim_name = "star_calib.jpg", media_variable = "MediaName", tsvariable = "RecordingTimestamp", excluded_stim = "instruction")
+        # specific target onsets, relative to calibration stimulus onset; these are specific to MB2
+        times <- c(1200, 4200, 7200, 10200)
+        # top-left corner of the stimulus; these are specific to LMU Babylab data for MB2
+        stimTopLeft <- c(280, 224)
+        # set target locations, correcting for stimulus top-left
+        targets <- data.frame(posX = c(50, 190, 726, 390) + stimTopLeft[1], posY = c(38, 500, 157, 235) + stimTopLeft[2])
+        # add targets positions to data set; here we can choose shorter target duration to split data for train-test
+        tmp2 <- addTargets(tmp, stimstart = stimstart, stimtype = "Single", targets = targets, tsvariable = "RecordingTimestamp", stimvariable = "MediaName", stimtimes = times, targetduration = 500)
+        # calculate calibration and add new columns with corrected data
+        tmp2 <- validateCalibrate(tmp2, calib_media_name = "star_calib.jpg", media_variable = "MediaName", gaze_point_x_variable = "GazePointX (ADCSpx)", gaze_point_y_variable = "GazePointY (ADCSpx)", max_distance = 400)
+        # add targets again, skipping the training portion of the data to test the calibration on test data
+        tmp2 <- addTargets(tmp2, stimstart = stimstart, stimtype = "Single", targets = targets, tsvariable = "RecordingTimestamp", stimvariable = "MediaName", stimtimes = times + 500, targetduration = 500)
+        # calculate metrics and add to metrics data frame
+        tmpCalibMetric <- metrics(tmp2, targets = targets, xcoordsvar = "GazePointX (ADCSpx)", ycoordsvar = "GazePointY (ADCSpx)")
+        tmpCalibMetric$participant <- participant
+        allMetrics <- rbind(allMetrics, tmpCalibMetric)
+    }
 }
